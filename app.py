@@ -1,4 +1,6 @@
+
 import base64
+import html
 import pandas as pd
 import streamlit as st
 
@@ -10,6 +12,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+GITHUB_URL = "https://github.com/aarxshi/SheetWise"
 
 # ---------- Theme ----------
 st.markdown(
@@ -47,7 +51,6 @@ st.markdown(
         max-width: 1450px;
         padding: 1.1rem 1.5rem 6.5rem 1.5rem;
     }
-    /* Keep the main content compact and readable at desktop resolutions. */
     [data-testid="stMainBlockContainer"] {
         max-width: 1450px;
     }
@@ -57,7 +60,7 @@ st.markdown(
         line-height: 1.45;
     }
     [data-testid="stSidebar"] .block-container {
-        padding: 1rem .85rem 1rem .85rem;
+        padding: 1rem .85rem;
         display: flex;
         flex-direction: column;
         min-height: calc(100vh - 2rem);
@@ -97,7 +100,6 @@ st.markdown(
         color: var(--forest);
         font-weight: 800;
     }
-        /* Browse files button */
     [data-testid="stFileUploaderDropzone"] button {
         background-color: #294720 !important;
         color: #ffffff !important;
@@ -105,16 +107,10 @@ st.markdown(
         border-radius: 8px !important;
         opacity: 1 !important;
     }
-
     [data-testid="stFileUploaderDropzone"] button:hover {
         background-color: #3e5e35 !important;
         color: #ffffff !important;
         border-color: #3e5e35 !important;
-    }
-
-    [data-testid="stFileUploaderDropzone"] button p,
-    [data-testid="stFileUploaderDropzone"] button span {
-        color: #ffffff !important;
     }
     .topbar {
         background: var(--canvas-light);
@@ -142,6 +138,7 @@ st.markdown(
         width: fit-content;
         max-width: 75%;
         box-shadow: 0 4px 12px rgba(25,55,25,.08);
+        overflow-wrap: anywhere;
     }
     .chat-assistant {
         background: var(--bubble);
@@ -152,6 +149,7 @@ st.markdown(
         max-width: 88%;
         line-height: 1.55;
         box-shadow: 0 5px 14px rgba(25,55,25,.12);
+        overflow-wrap: anywhere;
     }
     .result-label {
         display: inline-block;
@@ -161,6 +159,31 @@ st.markdown(
         border-radius: 20px;
         font-size: .82rem;
         margin: .4rem 0 .75rem 0;
+    }
+    .demo-notice {
+        background: rgba(41,71,32,.72);
+        color: #f7faf4;
+        border: 1px solid rgba(255,255,255,.22);
+        padding: 12px 15px;
+        border-radius: 12px;
+        margin: .4rem 0 1rem 0;
+        font-size: .9rem;
+        line-height: 1.5;
+    }
+    .repo-link {
+        display: block;
+        text-align: center;
+        text-decoration: none !important;
+        background: #f5f7f2;
+        color: #263a25 !important;
+        border-radius: 10px;
+        padding: 11px 12px;
+        font-weight: 650;
+        margin-top: .5rem;
+    }
+    .repo-link:hover {
+        background: white;
+        color: #1e321d !important;
     }
     div.stButton > button {
         width: 100%;
@@ -221,16 +244,14 @@ st.markdown(
     [data-testid="stChatInput"] button {
         color: #263a25 !important;
     }
-    /* Sidebar controls need the same strong contrast as the main buttons. */
     [data-testid="stSidebar"] div.stButton > button,
     [data-testid="stSidebar"] div.stButton > button p,
     [data-testid="stSidebar"] div.stButton > button span {
         background: #f5f7f2;
         color: #263a25 !important;
     }
-    [data-testid="stFileUploaderDropzone"] button,
-    [data-testid="stFileUploaderDropzone"] button span {
-        color: #263a25 !important;
+    [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
+        opacity: .65;
     }
     [data-testid="stAlert"] {
         border-radius: 12px;
@@ -269,12 +290,34 @@ def load_sample_data():
         "Discount": [5, 10, 0, 5, 8, 0, 10, 5, 12, 5, 8, 0],
     })
 
+
 sample_df = load_sample_data()
+df = sample_df.copy()
 
 # ---------- Sidebar ----------
+
 with st.sidebar:
     st.markdown(
         '<div class="brand"><span class="brand-icon">S</span> SheetWise</div>',
+        unsafe_allow_html=True,
+    )
+
+    # GitHub link near the top
+    st.markdown(
+        '<a class="repo-link" href="https://github.com/aarxshi/SheetWise" '
+        'target="_blank" rel="noopener noreferrer">'
+        'View project on GitHub ↗</a>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
+        <div class="demo-notice">
+            <strong>Demo version</strong><br>
+            Explore SheetWise using fictional sample data.
+            File uploads and the live AI model are disabled in this demo.
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -282,50 +325,56 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
+    st.markdown("---")
+
+    st.markdown("**Upload spreadsheet**")
+    st.file_uploader(
+        "Choose an Excel file",
+        type=["xlsx", "xls", "csv"],
+        disabled=True,
+        label_visibility="collapsed",
+        help="File uploads are disabled in this public demo.",
+        key="disabled_upload",
+    )
+    st.caption("Uploads disabled · Sample data only")
+
     st.markdown('<div class="eyebrow">Recent</div>', unsafe_allow_html=True)
+
     if st.session_state.get("messages"):
         latest = next(
-            (m["content"] for m in reversed(st.session_state.messages)
-             if m["role"] == "user"),
+            (
+                m["content"]
+                for m in reversed(st.session_state.messages)
+                if m["role"] == "user"
+            ),
             "New conversation",
         )
         st.caption(latest[:30] + ("…" if len(latest) > 30 else ""))
     else:
         st.caption("Your questions will appear here.")
 
-    st.markdown("<hr style='margin: 1.2rem 0 .8rem 0; opacity: .25;'>", unsafe_allow_html=True)
-    uploaded_file = st.file_uploader(
-        "Choose an Excel file",
-        type=["xlsx", "xls", "csv"],
-        label_visibility="collapsed",
-    )
-    if uploaded_file is not None:
-        try:
-            if uploaded_file.name.lower().endswith(".csv"):
-                df = pd.read_csv(uploaded_file)
-            else:
-                df = pd.read_excel(uploaded_file)
-            st.success(f"Loaded {uploaded_file.name}")
-        except Exception as exc:
-            st.error(f"Couldn't read file: {exc}")
-            df = sample_df.copy()
-    else:
-        df = sample_df.copy()
-
-    st.caption("Using fictional sample data" if uploaded_file is None else f"{len(df):,} rows loaded")
 
 # ---------- Query planning ----------
 def make_plan(question):
     q = question.lower().strip()
 
     if "correlation" in q and "units" in q and "revenue" in q:
-        return {"tool": "correlation", "x_column": "Units", "y_column": "Revenue"}
+        return {
+            "tool": "correlation",
+            "x_column": "Units",
+            "y_column": "Revenue",
+        }
 
-    if any(word in q for word in ["plot", "chart", "graph", "visualise", "visualize"]):
+    if any(
+        word in q
+        for word in ["plot", "chart", "graph", "visualise", "visualize"]
+    ):
         if "revenue" in q and "product" in q:
             return {
-                "tool": "plot", "plot": "bar",
-                "x_column": "Product", "y_column": "Revenue"
+                "tool": "plot",
+                "plot": "bar",
+                "x_column": "Product",
+                "y_column": "Revenue",
             }
 
     if "top" in q and "revenue" in q:
@@ -339,17 +388,26 @@ def make_plan(question):
     if "average" in q or "mean" in q:
         if "revenue" in q and "region" in q:
             return {
-                "tool": "aggregate", "x_column": "Region",
-                "y_column": "Revenue", "agg": "mean"
+                "tool": "aggregate",
+                "x_column": "Region",
+                "y_column": "Revenue",
+                "agg": "mean",
             }
 
-    if "west" in q and any(word in q for word in ["filter", "show", "sales", "region"]):
+    if "west" in q and any(
+        word in q for word in ["filter", "show", "sales", "region"]
+    ):
         return {
-            "tool": "filter", "condition_column": "Region",
-            "condition_op": "==", "condition_value": "West"
+            "tool": "filter",
+            "condition_column": "Region",
+            "condition_op": "==",
+            "condition_value": "West",
         }
 
-    if any(word in q for word in ["summarise", "summarize", "summary", "overview"]):
+    if any(
+        word in q
+        for word in ["summarise", "summarize", "summary", "overview"]
+    ):
         return {"tool": "summary"}
 
     return None
@@ -357,36 +415,58 @@ def make_plan(question):
 
 def analyse(question, data):
     plan = make_plan(question)
+
     if plan is None:
         return {
             "type": "message",
             "data": (
                 "I can't handle that question in this demo yet. Try one of the "
                 "suggestions below, or ask about average revenue by region, top "
-                "products, West-region sales, or the relationship between units and revenue."
+                "products, West-region sales, or the relationship between "
+                "units and revenue."
             ),
         }
 
     result = execute_plan(plan, data.copy())
-    return {"type": result.get("type", "json"), "data": result.get("data"),
-            "columns": result.get("columns"), "tool": result.get("tool", plan["tool"])}
+
+    return {
+        "type": result.get("type", "json"),
+        "data": result.get("data"),
+        "columns": result.get("columns"),
+        "tool": result.get("tool", plan["tool"]),
+    }
 
 
 def render_result(result):
     if result["type"] == "message":
-        st.markdown(f'<div class="chat-assistant">{result["data"]}</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="chat-assistant">'
+            f'{html.escape(str(result["data"]))}</div>',
+            unsafe_allow_html=True,
+        )
         return
 
     st.markdown(
-        f'<div class="result-label">Analysis · {result.get("tool", "result")}</div>',
+        f'<div class="result-label">Analysis · '
+        f'{html.escape(str(result.get("tool", "result")))}</div>',
         unsafe_allow_html=True,
     )
+
     if result["type"] == "table":
-        output = pd.DataFrame(result["data"], columns=result.get("columns"))
-        st.dataframe(output, use_container_width=True, hide_index=True)
+        output = pd.DataFrame(
+            result["data"],
+            columns=result.get("columns"),
+        )
+        st.dataframe(
+            output,
+            use_container_width=True,
+            hide_index=True,
+        )
+
     elif result["type"] == "chart":
         image_bytes = base64.b64decode(result["data"])
-        st.image(image_bytes, use_container_width=False)
+        st.image(image_bytes, use_container_width=True)
+
     else:
         st.json(result["data"])
 
@@ -396,34 +476,56 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 last_question = next(
-    (m["content"] for m in reversed(st.session_state.messages) if m["role"] == "user"),
+    (
+        m["content"]
+        for m in reversed(st.session_state.messages)
+        if m["role"] == "user"
+    ),
     "Ask a question about your data",
 )
+
 st.markdown(
-    f'<div class="topbar">{last_question[:72]}'
-    f'<span style="float:right;font-size:.82rem;font-weight:500;opacity:.8">● Ready</span></div>',
+    f'<div class="topbar">{html.escape(last_question[:72])}'
+    f'<span style="float:right;font-size:.82rem;font-weight:500;'
+    f'opacity:.8">● Demo mode</span></div>',
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+    <div class="demo-notice">
+        This is an interactive demo of SheetWise. It uses fictional sales
+        data and predefined example queries. File uploads and live LLM
+        inference are disabled; calculations and supported charts are
+        generated using Python.
+    </div>
+    """,
     unsafe_allow_html=True,
 )
 
 if not st.session_state.messages:
     st.markdown("## Your data, in plain English")
     st.markdown(
-        '<div class="chat-assistant">Ask a question about your spreadsheet and SheetWise '
-        'will turn it into a supported analysis.</div>',
+        '<div class="chat-assistant">Ask a question about the sample '
+        'spreadsheet and SheetWise will run a supported analysis.</div>',
         unsafe_allow_html=True,
     )
 else:
     for message in st.session_state.messages:
         if message["role"] == "user":
             st.markdown(
-                f'<div class="chat-user">{message["content"]}</div>',
+                f'<div class="chat-user">'
+                f'{html.escape(message["content"])}</div>',
                 unsafe_allow_html=True,
             )
         else:
-            with st.container():
-                render_result(message["result"])
+            render_result(message["result"])
 
-st.markdown('<div class="eyebrow">Try asking</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="eyebrow">Try asking</div>',
+    unsafe_allow_html=True,
+)
+
 suggestions = [
     "Show average revenue by region",
     "Show the top 5 products by revenue",
@@ -432,25 +534,47 @@ suggestions = [
     "Find the correlation between units and revenue",
     "Summarise the dataset",
 ]
+
 cols = st.columns(3, gap="medium")
+
 for i, suggestion in enumerate(suggestions):
     with cols[i % 3]:
-        if st.button(suggestion, key=f"suggestion_{i}", use_container_width=True):
+        if st.button(
+            suggestion,
+            key=f"suggestion_{i}",
+            use_container_width=True,
+        ):
             st.session_state.pending_query = suggestion
             st.rerun()
 
-typed_query = st.chat_input("Ask something about your data…")
+typed_query = st.chat_input("Ask something about the sample data…")
 query = typed_query or st.session_state.pop("pending_query", None)
 
 if query:
-    st.session_state.messages.append({"role": "user", "content": query})
+    st.session_state.messages.append({
+        "role": "user",
+        "content": query,
+    })
+
     try:
-        with st.spinner("Analysing your data…"):
+        with st.spinner("Analysing sample data…"):
             result = analyse(query, df)
-        st.session_state.messages.append({"role": "assistant", "result": result})
-    except Exception as exc:
+
         st.session_state.messages.append({
             "role": "assistant",
-            "result": {"type": "message", "data": f"Couldn't complete the analysis: {exc}"},
+            "result": result,
         })
+
+    except Exception:
+        st.session_state.messages.append({
+            "role": "assistant",
+            "result": {
+                "type": "message",
+                "data": (
+                    "This analysis couldn't be completed. "
+                    "Please try another example question."
+                ),
+            },
+        })
+
     st.rerun()
